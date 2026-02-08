@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "MTQ0NTExODIxMzA0NTIyMzQ3Nw.GhHjQe.AmqRNUuOqdZz87HFwaND91Ty6nEY_oH5vHEZI8"
+BOT_TOKEN = "MTQ0NTExODIxMzA0NTIyMzQ3Nw.GetDs5.Y8lJwd41RCb70QlzGFgoFyBxPx4G-8sC23xTOg"
 API_KEY = "sk_live_e85490a8d13da31889d44af43e161d7334a6bc3343e8cd92378055ba6389c49b"
 API_START_URL = "https://satellitestress.st/api/v1/attack/start"
 LOG_WEBHOOK_URL = "https://discord.com/api/webhooks/1466302389807222837/g6fOHG4FmM4xQwWcrN2Egr3p2sgO5RKVVBz488hJ69_FQGg83Hn5joO4tJk8-Ix3VCtY"
