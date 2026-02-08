@@ -281,7 +281,7 @@ async def on_ready():
 async def attack_hub(interaction: discord.Interaction):
     # Enforce channel check
     if interaction.channel_id != ALLOWED_CHANNEL_ID:
-        return await interaction.response.send_message(f"❌ Commands are only allowed in <#{ALLOWED_CHANNEL_ID}>.", ephemeral=False)
+        return await interaction.response.send_message(f"❌ Commands are only allowed in <#{ALLOWED_CHANNEL_ID}>.", ephemeral=True)
 
     concurrents, max_time = await get_user_limits(interaction.user)
     if concurrents == 0:
