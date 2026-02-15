@@ -247,7 +247,7 @@ async def handle_api_call(interaction: discord.Interaction, params):
                     if params.get('requestmethod'): embed.add_field(name="📝 Type", value=f"`{params['requestmethod']} (H{params['http']})`", inline=True)
                     embed.set_footer(text=f"Operator: {interaction.user.name} | Concs: {req_concurrents}")
                     
-                    await interaction.followup.send("✅ **Attack Sent**", ephemeral=False)
+                    await interaction.followup.send("✅ **Attack Sent, remember to ping @suomepsl in case you need help with methods or whatsoever**", ephemeral=False)
                     await send_to_webhook(f"🟢 **C2 LOG DISPATCH**", embed)
                 else:
                     await interaction.followup.send(f"❌ API Error: {data.get('message', 'Unknown')}", ephemeral=False)
