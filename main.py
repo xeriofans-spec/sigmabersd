@@ -96,27 +96,38 @@ class L7Modal(discord.ui.Modal, title="Vision C2: L7 Dispatch"):
         self.url = discord.ui.TextInput(label="Target URL", placeholder="https://example.com", required=True)
         self.time = discord.ui.TextInput(label="Duration (Seconds)", placeholder="60", required=True)
         self.concurrents = discord.ui.TextInput(label="Concurrents", placeholder="1", required=True)
-        self.req_method = discord.ui.TextInput(label="Request Method (GET/POST)", placeholder="GET", default="GET", required=True, min_length=3, max_length=4)
-        self.http_ver = discord.ui.TextInput(label="HTTP Version (1=1.1, 2=2.0)", placeholder="2", default="2", required=True, min_length=1, max_length=1)
-        self.rate_limit = discord.ui.TextInput(label="Rate Limit (1-500)", placeholder="500", default="500", required=True, min_length=1, max_length=3)
+        # Accorpiamo i parametri per non superare il limite di 5 campi
+        self.advanced_config = discord.ui.TextInput(
+            label="Method | HTTP Ver | Rate Limit", 
+            placeholder="GET | 2 | 500", 
+            default="GET | 2 | 500", 
+            required=True
+        )
         
         self.add_item(self.url)
         self.add_item(self.time)
         self.add_item(self.concurrents)
-        self.add_item(self.req_method)
-        self.add_item(self.http_ver)
-        self.add_item(self.rate_limit)
+        self.add_item(self.advanced_config)
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Parsing dei parametri avanzati
+        try:
+            parts = [p.strip() for p in self.advanced_config.value.split("|")]
+            req_m = parts[0] if len(parts) > 0 else "GET"
+            h_ver = parts[1] if len(parts) > 1 else "2"
+            r_lim = parts[2] if len(parts) > 2 else "500"
+        except:
+            req_m, h_ver, r_lim = "GET", "2", "500"
+
         await handle_api_call(interaction, {
             "host": self.url.value,
             "port": "443",
             "time": self.time.value,
             "concurrent": self.concurrents.value,
             "method": self.method_val,
-            "requestmethod": self.req_method.value.upper(),
-            "http": self.http_ver.value,
-            "ratelimit": self.rate_limit.value
+            "requestmethod": req_m.upper(),
+            "http": h_ver,
+            "ratelimit": r_lim
         })
 
 class L7MethodSelect(discord.ui.Select):
